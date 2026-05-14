@@ -1,0 +1,6 @@
+-- Gán quyền admin cho một user đã tồn tại (chạy thủ công sau khi có tài khoản).
+-- Ví dụ:
+--   UPDATE users SET role = 'admin' WHERE email = 'ban@example.com';
+--
+-- Kiểm tra:
+--   SELECT id, email, role, is_disabled FROM users WHERE email = 'ban@example.com';

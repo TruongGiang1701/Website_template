@@ -1,0 +1,352 @@
+@import "tailwindcss";
+
+/* Design tokens — đồng bộ với Figma; chỉnh một lần tại đây. */
+:root {
+  --background: #f6f7fb;
+  --foreground: #103d79;
+  --muted: #5f76a1;
+  --muted-foreground: #4f6388;
+  --border: #c9d9f2;
+  --input: #c9d9f2;
+  --ring: #0f67be;
+  --primary: #0f67be;
+  --primary-foreground: #ffffff;
+  --secondary: #e8f1fc;
+  --secondary-foreground: #103d79;
+  --accent: #dbeeff;
+  --accent-foreground: #0b4f95;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+  --card: #ffffff;
+  --card-foreground: #163f79;
+  --surface: #ffffff;
+  --surface-elevated: #edf5ff;
+  --page: #f2f7ff;
+  --page-alt: #ffffff;
+
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1.5rem;
+  --radius-full: 9999px;
+
+  --shadow-xs: 0 1px 2px 0 rgb(15 103 190 / 0.08);
+  --shadow-sm: 0 2px 6px -2px rgb(15 103 190 / 0.16);
+  --shadow-md: 0 8px 20px -8px rgb(15 103 190 / 0.2);
+  --shadow-lg: 0 16px 32px -12px rgb(15 103 190 / 0.25);
+
+  /* Spacing scale (rem) — ưu tiên bội số 4px */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+  --space-20: 5rem;
+  --space-24: 6rem;
+  --space-28: 7rem;
+  --space-32: 8rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #07142a;
+    --foreground: #eff6ff;
+    --muted: #9fb5d9;
+    --muted-foreground: #c5d6f0;
+    --border: #284675;
+    --input: #284675;
+    --ring: #8cc7ff;
+    --primary: #63b4ff;
+    --primary-foreground: #031325;
+    --secondary: #15325c;
+    --secondary-foreground: #eff6ff;
+    --accent: #0f2d53;
+    --accent-foreground: #d6e9ff;
+    --destructive: #ef4444;
+    --destructive-foreground: #020617;
+    --card: #0d2343;
+    --card-foreground: #eff6ff;
+    --surface: #0d2343;
+    --surface-elevated: #12305a;
+    --page: #07142a;
+    --page-alt: #0d2343;
+
+    --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.3);
+    --shadow-sm: 0 2px 6px -2px rgb(0 0 0 / 0.4);
+    --shadow-md: 0 8px 20px -8px rgb(0 0 0 / 0.48);
+    --shadow-lg: 0 16px 32px -12px rgb(0 0 0 / 0.56);
+  }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-surface: var(--surface);
+  --color-surface-elevated: var(--surface-elevated);
+  --color-page: var(--page);
+  --color-page-alt: var(--page-alt);
+
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
+  --radius-full: var(--radius-full);
+
+  --shadow-xs: var(--shadow-xs);
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+
+  --spacing-section: var(--space-20);
+  --spacing-gutter: var(--space-4);
+
+  --font-sans: var(--font-be-vietnam-pro);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-be-vietnam-pro), system-ui, sans-serif;
+}
+
+@keyframes chatbot-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes chatbot-wave {
+  0% {
+    transform: scale(0.9);
+    opacity: 0.75;
+  }
+  100% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+
+.chatbot-fab {
+  animation: chatbot-float 2.8s ease-in-out infinite;
+}
+
+.chatbot-wave {
+  position: absolute;
+  inset: -4px;
+  border-radius: 9999px;
+  border: 2px solid rgb(42 131 217 / 0.55);
+  animation: chatbot-wave 1.8s ease-out infinite;
+}
+
+@keyframes contact-cta-glow {
+  0%,
+  100% {
+    box-shadow: 0 10px 24px -10px rgb(255 122 35 / 0.72);
+    transform: translateY(0);
+  }
+  50% {
+    box-shadow: 0 14px 30px -8px rgb(255 122 35 / 0.88);
+    transform: translateY(-2px);
+  }
+}
+
+.contact-cta-button {
+  animation: contact-cta-glow 2.2s ease-in-out infinite;
+}
+
+@keyframes float {
+  0% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-14px);
+  }
+  100% {
+    transform: translateY(0px);
+  }
+}
+
+.animate-float-soft {
+  animation: float 6s ease-in-out infinite;
+}
+
+@keyframes roadmap-aurora-drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  33% {
+    transform: translate3d(5%, -4%, 0) scale(1.08);
+  }
+  66% {
+    transform: translate3d(-6%, 6%, 0) scale(0.96);
+  }
+}
+
+@keyframes roadmap-beam-sweep {
+  0% {
+    transform: translate3d(-18%, -6%, 0) rotate(-14deg);
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.18;
+  }
+  50% {
+    opacity: 0.28;
+  }
+  100% {
+    transform: translate3d(22%, 8%, 0) rotate(-14deg);
+    opacity: 0;
+  }
+}
+
+@keyframes roadmap-particle-float {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(0.9);
+    opacity: 0.35;
+  }
+  25% {
+    transform: translate3d(10px, -12px, 0) scale(1.05);
+    opacity: 0.9;
+  }
+  50% {
+    transform: translate3d(-6px, -28px, 0) scale(0.98);
+    opacity: 0.65;
+  }
+  75% {
+    transform: translate3d(8px, -14px, 0) scale(1.08);
+    opacity: 0.82;
+  }
+}
+
+.roadmap-aurora {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(90px);
+  opacity: 0.65;
+  animation: roadmap-aurora-drift 14s ease-in-out infinite;
+}
+
+.roadmap-aurora-a {
+  left: -8%;
+  top: -6%;
+  width: 38rem;
+  height: 28rem;
+  background: radial-gradient(
+    circle,
+    rgb(255 255 255 / 0.34) 0%,
+    rgb(180 227 255 / 0.22) 42%,
+    transparent 76%
+  );
+}
+
+.roadmap-aurora-b {
+  right: -10%;
+  top: 8%;
+  width: 32rem;
+  height: 26rem;
+  background: radial-gradient(
+    circle,
+    rgb(255 255 255 / 0.24) 0%,
+    rgb(104 190 255 / 0.25) 44%,
+    transparent 74%
+  );
+  animation-duration: 18s;
+  animation-direction: reverse;
+}
+
+.roadmap-aurora-c {
+  left: 18%;
+  bottom: -18%;
+  width: 34rem;
+  height: 24rem;
+  background: radial-gradient(
+    circle,
+    rgb(255 255 255 / 0.2) 0%,
+    rgb(142 224 255 / 0.22) 46%,
+    transparent 76%
+  );
+  animation-duration: 16s;
+}
+
+.roadmap-beam {
+  position: absolute;
+  inset: auto;
+  width: 36rem;
+  height: 7rem;
+  border-radius: 9999px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgb(255 255 255 / 0.02) 10%,
+    rgb(255 255 255 / 0.24) 50%,
+    rgb(255 255 255 / 0.05) 82%,
+    transparent 100%
+  );
+  filter: blur(14px);
+  mix-blend-mode: screen;
+  animation: roadmap-beam-sweep 11s linear infinite;
+}
+
+.roadmap-beam-a {
+  left: -8rem;
+  top: 10%;
+}
+
+.roadmap-beam-b {
+  left: 22%;
+  top: 46%;
+  width: 44rem;
+  animation-duration: 13s;
+  animation-delay: -4s;
+}
+
+.roadmap-beam-c {
+  right: -10rem;
+  top: 72%;
+  width: 32rem;
+  animation-duration: 9s;
+  animation-delay: -2s;
+}
+
+.roadmap-particle {
+  position: absolute;
+  display: block;
+  border-radius: 9999px;
+  background: radial-gradient(
+    circle,
+    rgb(255 255 255 / 0.95) 0%,
+    rgb(220 243 255 / 0.82) 48%,
+    transparent 78%
+  );
+  box-shadow:
+    0 0 14px rgb(255 255 255 / 0.72),
+    0 0 24px rgb(169 222 255 / 0.48);
+  animation: roadmap-particle-float 8s ease-in-out infinite;
+}
