@@ -1,5 +1,7 @@
+import { validate as isUuid } from "uuid";
 import { getDbPool, query } from "@/lib/db";
 import type {
+  AdminOrderListItemDTO,
   OrderDetailDTO,
   OrderEventDTO,
   OrderItemDTO,
@@ -39,6 +41,7 @@ type OrderItemRow = {
 
 type OrderEventRow = {
   id: string;
+  actor_user_id: string | null;
   source: "system" | "admin" | "webhook" | "customer";
   event_type: string;
   prev_status: string | null;
@@ -66,6 +69,24 @@ function toPaymentStatus(value: string): PaymentStatus {
     return value;
   }
   return "unpaid";
+}
+
+function parseOrderStatusFilter(value: string | null | undefined): OrderStatus | null {
+  if (!value?.trim()) return null;
+  const s = value.trim();
+  if (s === "pending" || s === "processing" || s === "completed" || s === "cancelled") {
+    return s;
+  }
+  return null;
+}
+
+function parsePaymentStatusFilter(value: string | null | undefined): PaymentStatus | null {
+  if (!value?.trim()) return null;
+  const s = value.trim();
+  if (s === "unpaid" || s === "paid" || s === "failed" || s === "refunded") {
+    return s;
+  }
+  return null;
 }
 
 function toInt(raw: string | number | null | undefined): number {
@@ -126,6 +147,7 @@ function mapItem(row: OrderItemRow): OrderItemDTO {
 function mapEvent(row: OrderEventRow): OrderEventDTO {
   return {
     id: row.id,
+    actor_user_id: row.actor_user_id,
     source: row.source,
     event_type: row.event_type,
     prev_status: row.prev_status,
@@ -340,6 +362,53 @@ export async function listOrdersByUser(userId: string): Promise<OrderListItemDTO
   return result.rows.map(mapSummary);
 }
 
+async function fetchOrderItemsAndEvents(orderId: string): Promise<{
+  items: OrderItemDTO[];
+  events: OrderEventDTO[];
+}> {
+  const items = await query<OrderItemRow>(
+    `
+      SELECT
+        p.id::text AS product_uuid,
+        p.legacy_key,
+        p.slug,
+        oi.title_snapshot,
+        oi.price_snapshot_vnd::text,
+        oi.qty::text
+      FROM order_items oi
+      JOIN products p ON p.id = oi.product_id
+      WHERE oi.order_id = $1::uuid
+      ORDER BY oi.title_snapshot ASC
+    `,
+    [orderId],
+  );
+
+  const events = await query<OrderEventRow>(
+    `
+      SELECT
+        oe.id,
+        oe.actor_user_id::text AS actor_user_id,
+        oe.source::text AS source,
+        oe.event_type,
+        oe.prev_status,
+        oe.next_status,
+        oe.prev_payment_status,
+        oe.next_payment_status,
+        oe.note,
+        oe.created_at::text
+      FROM order_events oe
+      WHERE oe.order_id = $1::uuid
+      ORDER BY oe.created_at DESC
+    `,
+    [orderId],
+  );
+
+  return {
+    items: items.rows.map(mapItem),
+    events: events.rows.map(mapEvent),
+  };
+}
+
 export async function getOrderByCodeForUser(
   userId: string,
   code: string,
@@ -377,46 +446,338 @@ export async function getOrderByCodeForUser(
     throw new OrdersMutationError("Không tìm thấy đơn hàng.", 404);
   }
 
-  const items = await query<OrderItemRow>(
-    `
-      SELECT
-        p.id::text AS product_uuid,
-        p.legacy_key,
-        p.slug,
-        oi.title_snapshot,
-        oi.price_snapshot_vnd::text,
-        oi.qty::text
-      FROM order_items oi
-      JOIN products p ON p.id = oi.product_id
-      WHERE oi.order_id = $1::uuid
-      ORDER BY oi.title_snapshot ASC
-    `,
-    [row.id],
-  );
-
-  const events = await query<OrderEventRow>(
-    `
-      SELECT
-        oe.id,
-        oe.source::text AS source,
-        oe.event_type,
-        oe.prev_status,
-        oe.next_status,
-        oe.prev_payment_status,
-        oe.next_payment_status,
-        oe.note,
-        oe.created_at::text
-      FROM order_events oe
-      WHERE oe.order_id = $1::uuid
-      ORDER BY oe.created_at DESC
-    `,
-    [row.id],
-  );
+  const { items, events } = await fetchOrderItemsAndEvents(row.id);
 
   return {
     ...mapBase(row),
-    items: items.rows.map(mapItem),
-    events: events.rows.map(mapEvent),
+    items,
+    events,
   };
 }
 
+type OrderBaseAdminRow = OrderBaseRow & {
+  user_id: string | null;
+  user_account_email: string | null;
+  user_account_name: string | null;
+  admin_notes: string | null;
+};
+
+export async function getOrderByIdForAdmin(orderId: string): Promise<OrderDetailDTO> {
+  const id = orderId.trim();
+  if (!id) {
+    throw new OrdersMutationError("Thiếu id đơn hàng.", 400);
+  }
+  if (!isUuid(id)) {
+    throw new OrdersMutationError("Id đơn hàng không hợp lệ.", 400);
+  }
+
+  const base = await query<OrderBaseAdminRow>(
+    `
+      SELECT
+        o.id,
+        o.code,
+        o.status::text,
+        o.payment_status::text,
+        o.subtotal_vnd::text,
+        o.discount_vnd::text,
+        o.total_vnd::text,
+        o.contact_name,
+        o.contact_email::text,
+        o.note,
+        o.created_at::text,
+        o.updated_at::text,
+        o.admin_notes,
+        o.user_id::text AS user_id,
+        u.email::text AS user_account_email,
+        u.name AS user_account_name
+      FROM orders o
+      LEFT JOIN users u ON u.id = o.user_id
+      WHERE o.id = $1::uuid
+      LIMIT 1
+    `,
+    [id],
+  );
+  const row = base.rows[0];
+  if (!row) {
+    throw new OrdersMutationError("Không tìm thấy đơn hàng.", 404);
+  }
+
+  const { items, events } = await fetchOrderItemsAndEvents(row.id);
+
+  return {
+    ...mapBase(row),
+    user_id: row.user_id,
+    user_account_email: row.user_account_email,
+    user_account_name: row.user_account_name,
+    admin_notes: row.admin_notes,
+    items,
+    events,
+  };
+}
+
+type AdminOrderSummaryRow = OrderSummaryRow & {
+  user_id: string | null;
+  user_account_email: string | null;
+};
+
+function mapAdminSummary(row: AdminOrderSummaryRow): AdminOrderListItemDTO {
+  return {
+    ...mapSummary(row),
+    user_id: row.user_id,
+    user_account_email: row.user_account_email,
+  };
+}
+
+export type AdminOrderListQuery = {
+  page: number;
+  pageSize: number;
+  status?: string | null;
+  payment_status?: string | null;
+  q?: string | null;
+};
+
+export type AdminOrderListResult = {
+  items: AdminOrderListItemDTO[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
+export async function listOrdersForAdmin(input: AdminOrderListQuery): Promise<AdminOrderListResult> {
+  const page = Math.max(1, input.page);
+  const pageSize = Math.min(100, Math.max(1, input.pageSize));
+  const offset = (page - 1) * pageSize;
+
+  const statusFilter = parseOrderStatusFilter(input.status);
+  const paymentFilter = parsePaymentStatusFilter(input.payment_status);
+  const qRaw = input.q?.trim() ?? "";
+  const q = qRaw.length > 0 ? qRaw : null;
+
+  const params: unknown[] = [statusFilter, paymentFilter, q];
+  const whereSql = `
+    WHERE ($1::text IS NULL OR o.status = $1)
+      AND ($2::text IS NULL OR o.payment_status = $2)
+      AND (
+        $3::text IS NULL
+        OR strpos(lower(o.code), lower(btrim($3::text))) > 0
+        OR strpos(lower(COALESCE(o.contact_email::text, '')), lower(btrim($3::text))) > 0
+        OR strpos(lower(COALESCE(u.email::text, '')), lower(btrim($3::text))) > 0
+      )
+  `;
+
+  const countRes = await query<{ total: string }>(
+    `
+      SELECT COUNT(*)::text AS total
+      FROM orders o
+      LEFT JOIN users u ON u.id = o.user_id
+      ${whereSql}
+    `,
+    params,
+  );
+  const total = toInt(countRes.rows[0]?.total);
+
+  const listParams = [...params, pageSize, offset];
+  const result = await query<AdminOrderSummaryRow>(
+    `
+      SELECT
+        o.id,
+        o.code,
+        o.status::text,
+        o.payment_status::text,
+        o.subtotal_vnd::text,
+        o.discount_vnd::text,
+        o.total_vnd::text,
+        o.contact_name,
+        o.contact_email::text,
+        o.note,
+        o.created_at::text,
+        o.updated_at::text,
+        COALESCE(oi.item_count, 0)::text AS item_count,
+        COALESCE(oi.total_qty, 0)::text AS total_qty,
+        o.user_id::text AS user_id,
+        u.email::text AS user_account_email
+      FROM orders o
+      LEFT JOIN users u ON u.id = o.user_id
+      LEFT JOIN LATERAL (
+        SELECT
+          COUNT(*)::integer AS item_count,
+          COALESCE(SUM(oi2.qty), 0)::integer AS total_qty
+        FROM order_items oi2
+        WHERE oi2.order_id = o.id
+      ) oi ON TRUE
+      ${whereSql}
+      ORDER BY o.created_at DESC
+      LIMIT $4::integer OFFSET $5::integer
+    `,
+    listParams,
+  );
+
+  return {
+    items: result.rows.map(mapAdminSummary),
+    total,
+    page,
+    pageSize,
+  };
+}
+
+export async function patchOrderStatusForAdmin(
+  orderId: string,
+  actorUserId: string,
+  nextStatus: OrderStatus,
+): Promise<OrderDetailDTO> {
+  const oid = orderId.trim();
+  const actor = actorUserId.trim();
+  if (!oid || !actor) {
+    throw new OrdersMutationError("Thiếu thông tin.", 400);
+  }
+  if (!isUuid(oid)) {
+    throw new OrdersMutationError("Id đơn hàng không hợp lệ.", 400);
+  }
+
+  const client = await getDbPool().connect();
+  try {
+    await client.query("BEGIN");
+
+    const cur = await client.query<{
+      status: string;
+      payment_status: string;
+    }>(
+      `
+        SELECT o.status::text, o.payment_status::text
+        FROM orders o
+        WHERE o.id = $1::uuid
+        FOR UPDATE
+      `,
+      [oid],
+    );
+    const row = cur.rows[0];
+    if (!row) {
+      throw new OrdersMutationError("Không tìm thấy đơn hàng.", 404);
+    }
+
+    const prevStatus = toOrderStatus(row.status);
+    const prevPayment = toPaymentStatus(row.payment_status);
+
+    if (prevStatus === nextStatus) {
+      await client.query("COMMIT");
+      return getOrderByIdForAdmin(oid);
+    }
+
+    await client.query(
+      `
+        UPDATE orders
+        SET status = $2::text
+        WHERE id = $1::uuid
+      `,
+      [oid, nextStatus],
+    );
+
+    await client.query(
+      `
+        INSERT INTO order_events (
+          order_id,
+          actor_user_id,
+          source,
+          event_type,
+          prev_status,
+          next_status,
+          prev_payment_status,
+          next_payment_status,
+          note
+        )
+        VALUES (
+          $1::uuid,
+          $2::uuid,
+          'admin',
+          'order_status_updated',
+          $3::text,
+          $4::text,
+          $5::text,
+          $6::text,
+          NULL
+        )
+      `,
+      [oid, actor, prevStatus, nextStatus, prevPayment, prevPayment],
+    );
+
+    await client.query("COMMIT");
+    return getOrderByIdForAdmin(oid);
+  } catch (e) {
+    try {
+      await client.query("ROLLBACK");
+    } catch {
+      /* ignore */
+    }
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+export async function updateAdminNotes(
+  orderId: string,
+  actorUserId: string,
+  notes: string,
+): Promise<OrderDetailDTO> {
+  const oid = orderId.trim();
+  const actor = actorUserId.trim();
+  
+  if (!oid || !actor) {
+    throw new OrdersMutationError("Thiếu thông tin.", 400);
+  }
+  if (!isUuid(oid)) {
+    throw new OrdersMutationError("Id đơn hàng không hợp lệ.", 400);
+  }
+
+  const client = await getDbPool().connect();
+  try {
+    await client.query("BEGIN");
+
+    const cur = await client.query<{ id: string }>(
+      `SELECT id FROM orders WHERE id = $1::uuid FOR UPDATE`,
+      [oid],
+    );
+    if (cur.rows.length === 0) {
+      throw new OrdersMutationError("Không tìm thấy đơn hàng.", 404);
+    }
+
+    await client.query(
+      `
+        UPDATE orders
+        SET admin_notes = $2::text
+        WHERE id = $1::uuid
+      `,
+      [oid, notes],
+    );
+
+    await client.query(
+      `
+        INSERT INTO order_events (
+          order_id,
+          actor_user_id,
+          source,
+          event_type,
+          note
+        )
+        VALUES (
+          $1::uuid,
+          $2::uuid,
+          'admin',
+          'admin_notes_updated',
+          'Đã cập nhật ghi chú nội bộ'
+        )
+      `,
+      [oid, actor],
+    );
+
+    await client.query("COMMIT");
+    return getOrderByIdForAdmin(oid);
+  } catch (e) {
+    try {
+      await client.query("ROLLBACK");
+    } catch {}
+    throw e;
+  } finally {
+    client.release();
+  }
+}

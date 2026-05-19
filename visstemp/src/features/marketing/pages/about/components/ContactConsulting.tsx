@@ -70,7 +70,7 @@ export function ContactConsulting({ className }: { className?: string }) {
                 </button>
               </form>
             </div>
-
+            
             <div className="relative">
               <div className="mx-auto flex max-w-[520px] items-center justify-center">
                 <div className="relative">

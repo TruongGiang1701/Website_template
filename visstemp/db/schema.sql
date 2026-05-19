@@ -104,6 +104,33 @@ BEGIN
 END $$;
 
 -- =========================
+-- 1.5) Categories
+-- =========================
+
+CREATE TABLE IF NOT EXISTS categories (
+  id uuid PRIMARY KEY DEFAULT app_uuid_v7(),
+  name text NOT NULL UNIQUE,
+  slug text NOT NULL UNIQUE,
+  sort_order integer DEFAULT 0,
+  is_active boolean DEFAULT true,
+  parent_id uuid NULL REFERENCES categories(id) ON DELETE CASCADE,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'trg_categories_updated_at') THEN
+    CREATE TRIGGER trg_categories_updated_at
+    BEFORE UPDATE ON categories
+    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+  END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS idx_categories_parent_id ON categories(parent_id);
+CREATE INDEX IF NOT EXISTS idx_categories_slug ON categories(slug);
+
+-- =========================
 -- 2) Products (Templates)
 -- =========================
 
@@ -115,6 +142,7 @@ CREATE TABLE IF NOT EXISTS products (
   slug text NOT NULL UNIQUE,
   description text NULL,
   group_name text NOT NULL,
+  category_id uuid NULL REFERENCES categories(id) ON DELETE SET NULL,
   price_vnd integer NOT NULL CHECK (price_vnd >= 0),
   featured boolean NOT NULL DEFAULT false,
   status text NOT NULL DEFAULT 'active' CHECK (status IN ('draft', 'active', 'archived')),

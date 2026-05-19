@@ -15,6 +15,8 @@ export type ProductListDbRow = {
   slug: string;
   title: string;
   group_name: string;
+  category_id: string | null;
+  category_name: string | null;
   price_vnd: string;
   featured: boolean;
   primary_image: string | null;
@@ -30,6 +32,8 @@ export type ProductDetailDbRow = {
   title: string;
   description: string | null;
   group_name: string;
+  category_id: string | null;
+  category_name: string | null;
   price_vnd: string;
   featured: boolean;
   try_url: string | null;
@@ -55,9 +59,9 @@ export type ListProductsFilter = {
   legacy_keys?: string[];
   /** Loc khoang gia / khuyen mai (khop UI sidebar) */
   price_bucket?: "under_10m" | "10m_15m" | "promo";
-  featured?: boolean;
-  all_status?: boolean;
   include_deleted?: boolean;
+  category_id?: string;
+  category_slug?: string;
 };
 
 function buildListWhere(filters: ListProductsFilter): {
@@ -92,10 +96,19 @@ function buildListWhere(filters: ListProductsFilter): {
   const groups = (filters.groups ?? []).map((g) => g.trim()).filter(Boolean);
   if (groups.length > 0) {
     params.push(groups);
-    clauses.push(`p.group_name = ANY($${params.length}::text[])`);
+    clauses.push(`(p.group_name = ANY($${params.length}::text[]) OR c.name = ANY($${params.length}::text[]))`);
   } else if (groupTrim.length > 0) {
     params.push(groupTrim);
-    clauses.push(`p.group_name = $${params.length}`);
+    clauses.push(`(p.group_name = $${params.length} OR c.name = $${params.length} OR c.slug = $${params.length})`);
+  }
+
+  if (filters.category_id) {
+    params.push(filters.category_id);
+    clauses.push(`p.category_id = $${params.length}::uuid`);
+  }
+  if (filters.category_slug) {
+    params.push(filters.category_slug);
+    clauses.push(`c.slug = $${params.length}`);
   }
 
   if (filters.price_bucket === "under_10m") {
@@ -126,7 +139,9 @@ function mapRowToListItem(row: ProductListDbRow): ProductListItemDTO {
     uuid: row.uuid,
     slug: row.slug,
     title: row.title,
-    group: row.group_name,
+    group: row.category_name || row.group_name,
+    category_id: row.category_id,
+    category_name: row.category_name,
     tags: Array.isArray(row.tag_names) ? row.tag_names : [],
     image,
     href: `/templates/${row.slug}`,
@@ -170,6 +185,8 @@ export async function listProducts(
         p.slug,
         p.title,
         p.group_name,
+        p.category_id::text AS category_id,
+        c.name AS category_name,
         p.price_vnd::text,
         p.featured,
         p.status::text,
@@ -191,6 +208,7 @@ export async function listProducts(
         ORDER BY pi2.sort_order ASC, pi2.created_at ASC
         LIMIT 1
       ) pi ON TRUE
+      LEFT JOIN categories c ON c.id = p.category_id
       WHERE ${whereSql}
       ORDER BY p.featured DESC, p.updated_at DESC, p.created_at DESC
       LIMIT ${limParam} OFFSET ${offParam}
@@ -227,6 +245,8 @@ export async function getProductDetailBySlug(
         p.title,
         p.description,
         p.group_name,
+        p.category_id::text AS category_id,
+        c.name AS category_name,
         p.price_vnd::text,
         p.featured,
         p.try_url,
@@ -249,6 +269,7 @@ export async function getProductDetailBySlug(
         ORDER BY pi2.sort_order ASC, pi2.created_at ASC
         LIMIT 1
       ) pi ON TRUE
+      LEFT JOIN categories c ON c.id = p.category_id
       WHERE ${detailWhereClause(mode)}
       LIMIT 1
     `,
@@ -301,6 +322,8 @@ export async function listRelatedPublicProducts(
         p.slug,
         p.title,
         p.group_name,
+        p.category_id::text AS category_id,
+        c.name AS category_name,
         p.price_vnd::text,
         p.featured,
         p.status::text,
@@ -322,11 +345,12 @@ export async function listRelatedPublicProducts(
         ORDER BY pi2.sort_order ASC, pi2.created_at ASC
         LIMIT 1
       ) pi ON TRUE
+      LEFT JOIN categories c ON c.id = p.category_id
       WHERE p.status = 'active'
         AND p.deleted_at IS NULL
         AND p.slug <> $1
       ORDER BY
-        CASE WHEN p.group_name = $2 THEN 0 ELSE 1 END,
+        CASE WHEN COALESCE(c.name, p.group_name) = $2 THEN 0 ELSE 1 END,
         p.featured DESC,
         p.updated_at DESC,
         p.created_at DESC
@@ -352,10 +376,11 @@ export type ProductCatalogStats = {
 export async function getPublicProductCatalogStats(): Promise<ProductCatalogStats> {
   const rows = await query<{ group_name: string; cnt: string }>(
     `
-      SELECT group_name, COUNT(*)::text AS cnt
+      SELECT COALESCE(c.name, p.group_name) AS group_name, COUNT(*)::text AS cnt
       FROM products p
+      LEFT JOIN categories c ON c.id = p.category_id
       WHERE p.status = 'active' AND p.deleted_at IS NULL
-      GROUP BY group_name
+      GROUP BY COALESCE(c.name, p.group_name)
       ORDER BY group_name
     `,
   );
@@ -375,4 +400,41 @@ export async function getPublicProductCatalogStats(): Promise<ProductCatalogStat
     categories,
   };
 }
+
+export async function createProduct(input: any): Promise<any> {
+  const slug = input.slug || input.title.toLowerCase().replace(/ /g, "-").replace(/[^\w-]+/g, "");
+  const groupName = "General"; 
+  
+  const res = await query(
+    `
+    INSERT INTO products (title, slug, description, price_vnd, status, featured, category_id, group_name)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    RETURNING id
+    `,
+    [
+      input.title,
+      slug,
+      input.description || null,
+      input.price_vnd || 0,
+      input.status || "active",
+      input.featured || false,
+      input.category_id || null,
+      groupName,
+    ],
+  );
+  
+  const productId = res.rows[0].id;
+  
+  if (input.images && Array.isArray(input.images)) {
+    for (const img of input.images) {
+      await query(
+        `INSERT INTO product_images (product_id, url, alt, sort_order) VALUES ($1, $2, $3, $4)`,
+        [productId, img.url, input.title, img.sort_order || 0],
+      );
+    }
+  }
+  
+  return { id: productId };
+}
+
 

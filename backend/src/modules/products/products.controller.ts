@@ -10,16 +10,23 @@ import {
   Patch,
   Post,
   Query,
+  UseGuards,
 } from "@nestjs/common";
 import {
+  ApiBearerAuth,
   ApiBody,
+  ApiForbiddenResponse,
   ApiOkResponse,
   ApiOperation,
   ApiParam,
   ApiQuery,
   ApiTags,
+  ApiUnauthorizedResponse,
 } from "@nestjs/swagger";
 import { apiError, asPlainObject } from "@/common/http-error";
+import { Roles } from "@/common/decorators/roles.decorator";
+import { RolesGuard } from "@/common/guards/roles.guard";
+import { JwtAuthGuard } from "@/modules/auth/jwt-auth.guard";
 import { ProductMutationError } from "./products.mutations";
 import type { ListProductsFilter } from "./products.repository";
 import { ProductsService } from "./products.service";
@@ -197,7 +204,12 @@ export class ProductsController {
     }
   }
 
-  @ApiOperation({ summary: "Tạo sản phẩm" })
+  @ApiOperation({ summary: "Tạo sản phẩm (chỉ admin)" })
+  @ApiBearerAuth()
+  @ApiUnauthorizedResponse({ description: "Thiếu hoặc sai Bearer access token." })
+  @ApiForbiddenResponse({ description: "Token hợp lệ nhưng không phải admin." })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("admin")
   @ApiBody({
     schema: {
       type: "object",
@@ -265,7 +277,12 @@ export class ProductsController {
     }
   }
 
-  @ApiOperation({ summary: "Cập nhật sản phẩm theo slug" })
+  @ApiOperation({ summary: "Cập nhật sản phẩm theo slug (chỉ admin)" })
+  @ApiBearerAuth()
+  @ApiUnauthorizedResponse({ description: "Thiếu hoặc sai Bearer access token." })
+  @ApiForbiddenResponse({ description: "Token hợp lệ nhưng không phải admin." })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("admin")
   @ApiParam({ name: "slug", example: "website-ecommerce-noi-that" })
   @ApiBody({
     schema: {
@@ -291,7 +308,12 @@ export class ProductsController {
     }
   }
 
-  @ApiOperation({ summary: "Xóa mềm sản phẩm theo slug" })
+  @ApiOperation({ summary: "Xóa mềm sản phẩm theo slug (chỉ admin)" })
+  @ApiBearerAuth()
+  @ApiUnauthorizedResponse({ description: "Thiếu hoặc sai Bearer access token." })
+  @ApiForbiddenResponse({ description: "Token hợp lệ nhưng không phải admin." })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("admin")
   @ApiParam({ name: "slug", example: "website-ecommerce-noi-that" })
   @Delete(":slug")
   async remove(@Param("slug") slug: string) {

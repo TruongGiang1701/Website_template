@@ -25,3 +25,16 @@ export type UserAuthDTO = {
   is_disabled: boolean;
   password_hash: string;
 };
+
+export type AdminUserListItemDTO = {
+  id: string;
+  email: string;
+  name: string;
+  role: "admin" | "staff" | "customer";
+  is_disabled: boolean;
+};
+
+export type AdminUserDetailDTO = AdminUserListItemDTO & {
+  order_count: number;
+  total_spent_vnd: number;
+};

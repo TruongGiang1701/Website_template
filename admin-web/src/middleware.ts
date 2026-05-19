@@ -1,40 +1,54 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { ADMIN_ACCESS_COOKIE } from "@/lib/auth-storage";
-import { decodeJwtPayload } from "@/lib/jwt-decode";
+import {
+  ADMIN_ACCESS_COOKIE,
+  ADMIN_REFRESH_COOKIE,
+} from "@/lib/auth-storage";
+import { isValidAccessTokenShape, isValidRefreshTokenShape } from "@/lib/jwt-decode";
 
 const LOGIN = "/login";
 
 function isProtectedPath(pathname: string) {
   if (pathname === LOGIN) return false;
-  const protectedPrefixes = ["/dashboard", "/products", "/orders", "/users", "/system-logs"];
+  const protectedPrefixes = [
+    "/dashboard",
+    "/products",
+    "/orders",
+    "/users",
+    "/system-logs",
+    "/categories",
+  ];
   return protectedPrefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
-function readAccessToken(cookieValue: string | undefined) {
+function readCookieToken(cookieValue: string | undefined) {
   if (!cookieValue) return "";
   try {
     return decodeURIComponent(cookieValue);
-  } catch {
+  }
+  catch {
     return cookieValue;
   }
 }
 
+/** Cho vào app nếu access còn hạn HOẶC refresh còn hạn (client sẽ làm mới access). */
+function hasAdminGateAccess(accessRaw: string | undefined, refreshRaw: string | undefined) {
+  const access = readCookieToken(accessRaw);
+  if (access && isValidAccessTokenShape(access)) return true;
+
+  const refresh = readCookieToken(refreshRaw);
+  if (refresh && isValidRefreshTokenShape(refresh)) return true;
+
+  return false;
+}
+
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const accessRaw = request.cookies.get(ADMIN_ACCESS_COOKIE)?.value;
+  const refreshRaw = request.cookies.get(ADMIN_REFRESH_COOKIE)?.value;
 
   if (pathname === LOGIN) {
-    const raw = request.cookies.get(ADMIN_ACCESS_COOKIE)?.value;
-    const token = readAccessToken(raw);
-    const decoded = token ? decodeJwtPayload(token) : null;
-    const expired =
-      typeof decoded?.exp === "number" && decoded.exp < Math.floor(Date.now() / 1000);
-    if (
-      token &&
-      decoded?.token_use !== "refresh" &&
-      !expired &&
-      decoded?.role === "admin"
-    ) {
+    if (hasAdminGateAccess(accessRaw, refreshRaw)) {
       return NextResponse.redirect(new URL("/dashboard", request.url));
     }
     return NextResponse.next();
@@ -44,23 +58,17 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const token = readAccessToken(request.cookies.get(ADMIN_ACCESS_COOKIE)?.value);
-  const decoded = token ? decodeJwtPayload(token) : null;
-  const role = decoded?.role;
-  const isRefresh = decoded?.token_use === "refresh";
-  const expired =
-    typeof decoded?.exp === "number" && decoded.exp < Math.floor(Date.now() / 1000);
-
-  if (!token || isRefresh || expired || role !== "admin") {
-    const url = request.nextUrl.clone();
-    url.pathname = LOGIN;
-    url.searchParams.set("from", pathname);
-    const res = NextResponse.redirect(url);
-    res.cookies.set(ADMIN_ACCESS_COOKIE, "", { path: "/", maxAge: 0 });
-    return res;
+  if (hasAdminGateAccess(accessRaw, refreshRaw)) {
+    return NextResponse.next();
   }
 
-  return NextResponse.next();
+  const url = request.nextUrl.clone();
+  url.pathname = LOGIN;
+  url.searchParams.set("from", pathname);
+  const res = NextResponse.redirect(url);
+  res.cookies.set(ADMIN_ACCESS_COOKIE, "", { path: "/", maxAge: 0 });
+  res.cookies.set(ADMIN_REFRESH_COOKIE, "", { path: "/", maxAge: 0 });
+  return res;
 }
 
 export const config = {

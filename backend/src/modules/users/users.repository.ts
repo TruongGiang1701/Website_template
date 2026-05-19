@@ -217,3 +217,111 @@ export async function updateUserSettingsByUserId(
   return refreshed;
 }
 
+export type AdminUserListQuery = {
+  page: number;
+  pageSize: number;
+  q?: string | null;
+};
+
+export async function listUsersForAdmin(input: AdminUserListQuery): Promise<{
+  items: AdminUserListItemDTO[];
+  total: number;
+  page: number;
+  pageSize: number;
+}> {
+  const page = Math.max(1, input.page);
+  const pageSize = Math.min(100, Math.max(1, input.pageSize));
+  const offset = (page - 1) * pageSize;
+  const q = input.q?.trim() || null;
+
+  const whereSql = q
+    ? `WHERE (lower(u.email) LIKE lower($1) OR lower(u.name) LIKE lower($1))`
+    : "";
+  const params = q ? [`%${q}%`] : [];
+
+  const countRes = await query<{ total: string }>(
+    `SELECT COUNT(*)::text AS total FROM users u ${whereSql}`,
+    params,
+  );
+  const total = Number.parseInt(countRes.rows[0]?.total || "0", 10);
+
+  const listParams = q ? [...params, pageSize, offset] : [pageSize, offset];
+  const listRes = await query<AdminUserListItemDTO>(
+    `
+      SELECT id, email::text, name, role::text, is_disabled
+      FROM users u
+      ${whereSql}
+      ORDER BY u.created_at DESC
+      LIMIT $${params.length + 1} OFFSET $${params.length + 2}
+    `,
+    listParams,
+  );
+
+  return {
+    items: listRes.rows,
+    total,
+    page,
+    pageSize,
+  };
+}
+
+export async function getUserDetailForAdmin(
+  userId: string,
+): Promise<AdminUserDetailDTO | null> {
+  const res = await query<AdminUserDetailDTO>(
+    `
+      SELECT
+        u.id,
+        u.email::text,
+        u.name,
+        u.role::text,
+        u.is_disabled,
+        COALESCE(o.order_count, 0)::integer AS order_count,
+        COALESCE(o.total_spent, 0)::bigint AS total_spent_vnd
+      FROM users u
+      LEFT JOIN (
+        SELECT
+          user_id,
+          COUNT(*) AS order_count,
+          SUM(total_vnd) AS total_spent
+        FROM orders
+        WHERE status != 'cancelled'
+        GROUP BY user_id
+      ) o ON o.user_id = u.id
+      WHERE u.id = $1::uuid
+      LIMIT 1
+    `,
+    [userId],
+  );
+  return res.rows[0] ?? null;
+}
+
+export async function toggleUserDisabledStatus(
+  userId: string,
+  isDisabled: boolean,
+): Promise<AdminUserDetailDTO> {
+  await query(
+    `UPDATE users SET is_disabled = $2, updated_at = now() WHERE id = $1::uuid`,
+    [userId, isDisabled],
+  );
+  const updated = await getUserDetailForAdmin(userId);
+  if (!updated) throw new UsersMutationError("Không tìm thấy người dùng.", 404);
+  return updated;
+}
+
+export async function updateUserRole(
+  userId: string,
+  role: string,
+): Promise<AdminUserDetailDTO> {
+  if (role !== "admin" && role !== "staff" && role !== "customer") {
+    throw new UsersMutationError("Vai trò không hợp lệ.", 400);
+  }
+  await query(
+    `UPDATE users SET role = $2::user_role, updated_at = now() WHERE id = $1::uuid`,
+    [userId, role],
+  );
+  const updated = await getUserDetailForAdmin(userId);
+  if (!updated) throw new UsersMutationError("Không tìm thấy người dùng.", 404);
+  return updated;
+}
+

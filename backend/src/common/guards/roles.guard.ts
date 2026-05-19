@@ -3,6 +3,7 @@ import {
   ExecutionContext,
   ForbiddenException,
   Injectable,
+  Inject,
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { ROLES_KEY } from "@/common/decorators/roles.decorator";
@@ -11,7 +12,7 @@ import type { JwtRequest } from "@/modules/users/users.types";
 
 @Injectable()
 export class RolesGuard implements CanActivate {
-  constructor(private readonly reflector: Reflector) {}
+  constructor(@Inject(Reflector) private readonly reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
     const required = this.reflector.getAllAndOverride<JwtPayload["role"][]>(

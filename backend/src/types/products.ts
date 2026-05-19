@@ -4,6 +4,8 @@ export type ProductListItemDTO = {
   slug: string;
   title: string;
   group: string;
+  category_id?: string | null;
+  category_name?: string | null;
   tags: string[];
   image: string;
   href: string;

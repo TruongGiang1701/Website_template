@@ -1,6 +1,8 @@
 import { join } from "node:path";
 import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
+import { ServeStaticModule } from "@nestjs/serve-static";
+import { AdminModule } from "@/modules/admin/admin.module";
 import { AuthModule } from "@/modules/auth/auth.module";
 import { CartModule } from "@/modules/cart/cart.module";
 import { FavoritesModule } from "@/modules/favorites/favorites.module";
@@ -22,12 +24,17 @@ const backendRoot = join(__dirname, "..");
         join(backendRoot, "..", "visstemp", ".env"),
       ],
     }),
+    ServeStaticModule.forRoot({
+      rootPath: join(backendRoot, "public"),
+      serveRoot: "/public",
+    }),
     HealthModule,
     ProductsModule,
     CartModule,
     FavoritesModule,
     OrdersModule,
     UsersModule,
+    AdminModule,
     AuthModule,
   ],
 })

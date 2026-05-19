@@ -30,6 +30,7 @@ export type OrderItemDTO = {
 
 export type OrderEventDTO = {
   id: string;
+  actor_user_id: string | null;
   source: "system" | "admin" | "webhook" | "customer";
   event_type: string;
   prev_status: string | null;
@@ -43,4 +44,15 @@ export type OrderEventDTO = {
 export type OrderDetailDTO = Omit<OrderListItemDTO, "item_count" | "total_qty"> & {
   items: OrderItemDTO[];
   events: OrderEventDTO[];
+  /** Chỉ có khi gọi API admin chi tiết đơn (join users). */
+  user_id?: string | null;
+  user_account_email?: string | null;
+  user_account_name?: string | null;
+  admin_notes?: string | null;
+};
+
+/** Danh sách đơn cho admin (kèm email tài khoản khách nếu có). */
+export type AdminOrderListItemDTO = OrderListItemDTO & {
+  user_id: string | null;
+  user_account_email: string | null;
 };
